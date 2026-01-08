@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calorie Bank - 大さん専用</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Lucide (icons) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Babel: ★ text/babel を使うなら先に読む -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  </style>
+</head>
+
+<body class="bg-slate-100">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    function App() {
+      const [activeTab, setActiveTab] = useState('bank');
+      const [goals, setGoals] = useState(() => {
+        const saved = localStorage.getItem('calorie_bank_goals');
+        return saved ? JSON.parse(saved) : { calorie: 2000, weight: 65.0 };
+      });
+      const [isEditingGoal, setIsEditingGoal] = useState(false);
+      const [dailyLog, setDailyLog] = useState(() => {
+        const saved = localStorage.getItem('calorie_bank_data');
+        return saved ? JSON.parse(saved) : {};
+      });
+
+      const today = new Date().toISOString().split('T')[0];
+      const [inputCalorie, setInputCalorie] = useState('');
+      const [weight, setWeight] = useState('');
+      const [fat, setFat] = useState('');
+
+      useEffect(() => {
+        localStorage.setItem('calorie_bank_data', JSON.stringify(dailyLog));
+        localStorage.setItem('calorie_bank_goals', JSON.stringify(goals));
+      }, [dailyLog, goals]);
+
+      const currentDayData = useMemo(
+        () => dailyLog[today] || { weight: 0, fat: 0, consumed: 0 },
+        [dailyLog, today]
+      );
+
+      const todaySaving = goals.calorie - currentDayData.consumed;
+
+      const totalSavings = useMemo(() => {
+        return Object.keys(dailyLog).reduce((acc, date) => {
+          const dayData = dailyLog[date];
+          return acc + (goals.calorie - (dayData.consumed || 0));
+        }, 0);
+      }, [dailyLog, goals.calorie]);
+
+      const updateEntry = (e) => {
+        e.preventDefault();
+        setDailyLog(prev => ({
+          ...prev,
+          [today]: {
+            ...prev[today],
+            consumed: parseInt(inputCalorie) || (prev[today]?.consumed || 0),
+            weight: parseFloat(weight) || (prev[today]?.weight || 0),
+            fat: parseFloat(fat) || (prev[today]?.fat || 0)
+          }
+        }));
+        setInputCalorie(''); setWeight(''); setFat('');
+        setTimeout(() => lucide.createIcons(), 0);
+      };
+
+      const weeklyStats = useMemo(() => {
+        const stats = [];
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(); d.setDate(d.getDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+          const data = dailyLog[dateStr] || { weight: 0, consumed: 0 };
+          stats.push({
+            date: dateStr.split('-').slice(1).join('/'),
+            saving: goals.calorie - (data.consumed || 0),
+            weight: data.weight
+          });
+        }
+        return stats;
+      }, [dailyLog, goals.calorie]);
+
+      return (
+        <div className="flex justify-center items-center min-h-screen p-2">
+          <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col h-[92vh] relative border border-slate-200">
+            <div className={`shrink-0 p-8 text-white transition-all duration-500 ${todaySaving >= 0 ? 'bg-indigo-600' : 'bg-rose-500'}`}>
+              <div className="flex justify-between items-center mb-6">
+                <h1 className="text-xl font-bold flex items-center gap-2">
+                  <i data-lucide="piggy-bank"></i> Calorie Bank
+                </h1>
+                <button onClick={() => setIsEditingGoal(true)} className="bg-white/20 p-2 rounded-full hover:bg-white/30 transition-colors">
+                  <i data-lucide="target"></i>
+                </button>
+              </div>
+              <div className="text-center py-4">
+                <p className="text-xs opacity-70 mb-1 font-bold uppercase tracking-wider">Today's Balance</p>
+                <div className="text-6xl font-black mb-4 flex items-center justify-center">
+                  {todaySaving > 0 ? '+' : ''}{todaySaving}
+                  <span className="text-lg font-normal ml-2 opacity-60">kcal</span>
+                </div>
+                <div className="inline-flex items-center gap-2 bg-black/20 px-5 py-2 rounded-2xl text-sm font-bold backdrop-blur-sm">
+                  <i data-lucide="wallet" className="w-4 h-4"></i> 累計貯金: {totalSavings.toLocaleString()} kcal
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-around bg-white border-b border-slate-100 p-2 shrink-0">
+              <button onClick={() => { setActiveTab('bank'); setTimeout(() => lucide.createIcons(), 0); }}
+                className={`flex-1 flex flex-col items-center py-2 transition-all ${activeTab === 'bank' ? 'text-indigo-600 bg-indigo-50 rounded-2xl' : 'text-slate-400'}`}>
+                <i data-lucide="piggy-bank" className="w-5 h-5"></i>
+                <span className="text-[10px] font-black mt-1 uppercase">貯金箱</span>
+              </button>
+              <button onClick={() => { setActiveTab('weekly'); setTimeout(() => lucide.createIcons(), 0); }}
+                className={`flex-1 flex flex-col items-center py-2 transition-all ${activeTab === 'weekly' ? 'text-indigo-600 bg-indigo-50 rounded-2xl' : 'text-slate-400'}`}>
+                <i data-lucide="trending-up" className="w-5 h-5"></i>
+                <span className="text-[10px] font-black mt-1 uppercase">推移</span>
+              </button>
+            </div>
+
+            <div className="flex-grow overflow-y-auto custom-scrollbar bg-slate-50/50">
+              {activeTab === 'bank' ? (
+                <div className="p-6 space-y-6">
+                  <form onSubmit={updateEntry} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-1 w-4 bg-indigo-500 rounded-full" />
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">本日のデータ</h3>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">摂取カロリー (kcal)</label>
+                        <input type="number"
+                          placeholder={currentDayData.consumed || "例: 1800"}
+                          value={inputCalorie}
+                          onChange={(e) => setInputCalorie(e.target.value)}
+                          className="w-full bg-slate-50 border-none rounded-2xl p-4 text-lg font-bold focus:ring-2 focus:ring-indigo-100" />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">体重 (kg)</label>
+                          <input type="number" step="0.1"
+                            placeholder={currentDayData.weight || "0.0"}
+                            value={weight}
+                            onChange={(e) => setWeight(e.target.value)}
+                            className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-100" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">体脂肪 (%)</label>
+                          <input type="number" step="0.1"
+                            placeholder={currentDayData.fat || "0.0"}
+                            value={fat}
+                            onChange={(e) => setFat(e.target.value)}
+                            className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-100" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button type="submit"
+                      className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 flex items-center justify-center gap-2">
+                      <i data-lucide="save" className="w-4 h-4"></i>データを記録する
+                    </button>
+                  </form>
+
+                  <div className="bg-white rounded-3xl p-6 border border-slate-100 space-y-3">
+                    <div className="flex justify-between text-xs font-bold text-slate-500">
+                      <span>現在の目標設定</span>
+                      <span className="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">{goals.calorie} kcal / 日</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-3 text-xs font-bold text-slate-500">
+                      <span>目標体重まで</span>
+                      <span className="text-sm font-black text-slate-800">
+                        あと {currentDayData.weight ? (currentDayData.weight - goals.weight).toFixed(1) : '--'} kg
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6 space-y-4">
+                  {weeklyStats.map((day, i) => (
+                    <div key={i} className="flex justify-between p-5 bg-white rounded-[1.5rem] border border-slate-100 shadow-sm">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-slate-400 mb-1">{day.date}</span>
+                        <span className="text-sm font-black text-slate-700">{day.weight ? `${day.weight} kg` : '--'}</span>
+                      </div>
+                      <div className="text-right flex items-center gap-4">
+                        <div className="flex flex-col items-end">
+                          <span className={`text-sm font-black ${day.saving >= 0 ? 'text-indigo-600' : 'text-rose-500'}`}>
+                            {day.saving > 0 ? '+' : ''}{day.saving}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase">kcal Saving</span>
+                        </div>
+                        <div className="w-1 h-8 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`w-full rounded-full ${day.saving >= 0 ? 'bg-indigo-500' : 'bg-rose-500'}`}
+                            style={{ height: `${Math.min(Math.abs(day.saving / 10), 100)}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {isEditingGoal && (
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm z-20 flex items-end">
+                <div className="w-full bg-white rounded-t-[3rem] p-8">
+                  <div className="flex justify-between items-center mb-8">
+                    <h3 className="font-black text-xl">目標設定</h3>
+                    <button onClick={() => setIsEditingGoal(false)} className="text-slate-400 bg-slate-100 p-2 rounded-full">✕</button>
+                  </div>
+                  <div className="space-y-6 mb-8">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">1日の目標摂取量 (kcal)</label>
+                      <input type="number" value={goals.calorie}
+                        onChange={(e) => setGoals({ ...goals, calorie: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-50 border-none rounded-2xl p-5 text-xl font-bold" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">目標体重 (kg)</label>
+                      <input type="number" step="0.1" value={goals.weight}
+                        onChange={(e) => setGoals({ ...goals, weight: parseFloat(e.target.value) || 0 })}
+                        className="w-full bg-slate-50 border-none rounded-2xl p-5 text-xl font-bold" />
+                    </div>
+                  </div>
+                  <button onClick={() => setIsEditingGoal(false)}
+                    className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-2xl">
+                    保存して戻る
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+    setTimeout(() => lucide.createIcons(), 0);
+  </script>
+</body>
+</html>
