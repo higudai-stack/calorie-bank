@@ -35,9 +35,9 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
+    const { useEffect, useMemo, useState } = React;
 
-    // ローカル日付（端末基準）YYYY-MM-DD
+    // ===== Utilities =====
     function getLocalISODate(d = new Date()) {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -50,143 +50,233 @@
     function fmtJP(iso) {
       return iso.replaceAll('-', '/');
     }
+    function isISO(iso) {
+      return /^\d{4}-\d{2}-\d{2}$/.test(iso);
+    }
     function clampISO(iso, minIso, maxIso) {
+      if (!isISO(iso)) return minIso;
       const d = toDateObj(iso);
       if (d < toDateObj(minIso)) return minIso;
       if (d > toDateObj(maxIso)) return maxIso;
       return iso;
     }
-    function isISO(iso) {
-      return /^\d{4}-\d{2}-\d{2}$/.test(iso);
+    function rangeDates(startIso, endIso) {
+      const out = [];
+      let d = toDateObj(startIso);
+      const end = toDateObj(endIso);
+      while (d <= end) {
+        out.push(getLocalISODate(d));
+        d.setDate(d.getDate() + 1);
+      }
+      return out;
+    }
+    function toIntOrNull(v) {
+      if (v === '' || v === null || v === undefined) return null;
+      const n = parseInt(String(v), 10);
+      return Number.isFinite(n) ? n : null;
+    }
+    function toFloatOrNull(v) {
+      if (v === '' || v === null || v === undefined) return null;
+      const n = parseFloat(String(v));
+      return Number.isFinite(n) ? n : null;
+    }
+    function fmt1(n) {
+      return (Math.round(n * 10) / 10).toFixed(1);
     }
 
     function App() {
+      // ===== 固定：開始日 =====
       const START_DATE = "2026-01-08";
+
       const todayRaw = getLocalISODate();
       const today = (toDateObj(todayRaw) < toDateObj(START_DATE)) ? START_DATE : todayRaw;
 
       const [activeTab, setActiveTab] = useState('bank');
 
       /**
-       * 仕様（CB_TEST3）
-       * - 2026-01-08 以降について
-       *   - 目標摂取カロリー（targetKcal）を手入力
-       *   - 余剰カロリー（surplusKcal）を手入力（マイナス可）
-       * - 累計残高 = surplusKcal の合計
-       * - 選択日を切替して、開始日以降〜今日まで入力できる（過去修正可）
+       * dailyLog[date] = {
+       *   target: number|null,    // 目標kcal（手入力）
+       *   consumed: number|null,  // 摂取kcal（手入力）
+       *   weight: number|null,    // 体重（手入力）
+       *   updatedAt: string|null
+       * }
        */
       const [dailyLog, setDailyLog] = useState(() => {
-        const saved = localStorage.getItem('calorie_bank_manual_v1');
+        const saved = localStorage.getItem('cb_test3_daily_log_v3');
         return saved ? JSON.parse(saved) : {};
       });
 
-      const [selectedDate, setSelectedDate] = useState(() => {
-        const saved = localStorage.getItem('calorie_bank_selected_date_v1');
-        const initial = saved && isISO(saved) ? saved : today;
-        return clampISO(initial, START_DATE, today);
+      // 目標体重（グローバル：日付に依存しない）
+      const [targetWeight, setTargetWeight] = useState(() => {
+        const saved = localStorage.getItem('cb_test3_target_weight_v1');
+        // 旧値がない場合は空（未設定）
+        return saved ? Number(saved) : null;
       });
 
-      // 入力欄（手入力）
-      const [targetInput, setTargetInput] = useState('');
-      const [surplusInput, setSurplusInput] = useState('');
+      // 入力画面の「日付」
+      const [selectedDate, setSelectedDate] = useState(() => {
+        const saved = localStorage.getItem('cb_test3_selected_date_v3');
+        return clampISO(saved || today, START_DATE, today);
+      });
 
-      // 永続化
       useEffect(() => {
-        localStorage.setItem('calorie_bank_manual_v1', JSON.stringify(dailyLog));
-        localStorage.setItem('calorie_bank_selected_date_v1', selectedDate);
+        localStorage.setItem('cb_test3_daily_log_v3', JSON.stringify(dailyLog));
+        localStorage.setItem('cb_test3_selected_date_v3', selectedDate);
       }, [dailyLog, selectedDate]);
 
-      // 開始日以前は除外（念のため）
+      useEffect(() => {
+        if (targetWeight === null || !Number.isFinite(targetWeight)) {
+          localStorage.removeItem('cb_test3_target_weight_v1');
+        } else {
+          localStorage.setItem('cb_test3_target_weight_v1', String(targetWeight));
+        }
+      }, [targetWeight]);
+
+      // 念のため開始日以前は除外
       const filteredLog = useMemo(() => {
         const out = {};
-        Object.keys(dailyLog || {}).forEach(date => {
-          if (!isISO(date)) return;
-          if (toDateObj(date) < toDateObj(START_DATE)) return;
-          out[date] = dailyLog[date];
+        Object.keys(dailyLog || {}).forEach(k => {
+          if (!isISO(k)) return;
+          if (toDateObj(k) < toDateObj(START_DATE)) return;
+          out[k] = dailyLog[k];
         });
         return out;
       }, [dailyLog]);
 
-      // 選択日のデータ
-      const dayData = useMemo(() => {
-        const d = filteredLog[selectedDate];
-        return d ? d : { targetKcal: 0, surplusKcal: 0, updatedAt: null };
-      }, [filteredLog, selectedDate]);
+      // 期間（日付リスト）
+      const allDates = useMemo(() => rangeDates(START_DATE, today), [START_DATE, today]);
 
-      // その日の表示（手入力値が空なら保存値を表示）
-      const displayTarget = (targetInput !== '' ? Number(targetInput) : Number(dayData.targetKcal || 0));
-      const displaySurplus = (surplusInput !== '' ? Number(surplusInput) : Number(dayData.surplusKcal || 0));
+      // saving計算（target & consumed が両方入っている日だけ）
+      const savingByDate = useMemo(() => {
+        const map = {};
+        for (const d of allDates) {
+          const row = filteredLog[d] || {};
+          const t = (row.target ?? null);
+          const c = (row.consumed ?? null);
+          if (Number.isFinite(t) && Number.isFinite(c)) map[d] = (t - c);
+          else map[d] = null; // 未確定
+        }
+        return map;
+      }, [filteredLog, allDates]);
 
-      // 累計残高（マイナス可）
+      // 今日の表示（ヘッダー）
+      const todaysSaving = savingByDate[today];
+      const headerSaving = Number.isFinite(todaysSaving) ? todaysSaving : 0;
+
+      // 累計残高（各日の saving を合計：未確定は合計に入れない）
       const totalBalance = useMemo(() => {
-        return Object.keys(filteredLog).reduce((acc, date) => {
-          const s = Number(filteredLog[date]?.surplusKcal ?? 0);
+        return allDates.reduce((acc, d) => {
+          const s = savingByDate[d];
           return acc + (Number.isFinite(s) ? s : 0);
         }, 0);
-      }, [filteredLog]);
+      }, [allDates, savingByDate]);
 
-      // 週表示（選択日基準の直近7日、開始日未満は除外）
-      const weeklyStats = useMemo(() => {
-        const stats = [];
-        const base = toDateObj(selectedDate);
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(base);
-          d.setDate(d.getDate() - i);
-          const iso = getLocalISODate(d);
-          if (toDateObj(iso) < toDateObj(START_DATE)) continue;
+      // ===== 入力画面：選択日の保存値 =====
+      const selectedRow = filteredLog[selectedDate] || { target: null, consumed: null, weight: null, updatedAt: null };
 
-          const row = filteredLog[iso] || null;
-          stats.push({
-            dateISO: iso,
-            dateLabel: iso.split('-').slice(1).join('/'),
-            targetKcal: Number(row?.targetKcal ?? 0),
-            surplusKcal: Number(row?.surplusKcal ?? 0),
-            hasLog: !!row
-          });
-        }
-        return stats;
-      }, [filteredLog, selectedDate]);
+      // 入力欄（目標kcal/摂取kcal/体重）
+      const [targetInput, setTargetInput] = useState('');
+      const [consumedInput, setConsumedInput] = useState('');
+      const [weightInput, setWeightInput] = useState('');
 
-      const saveDay = (e) => {
+      // 目標体重入力欄（グローバル）
+      const [targetWeightInput, setTargetWeightInput] = useState('');
+
+      // 日付変更時：入力欄は空に戻す（誤入力防止）
+      useEffect(() => {
+        setTargetInput('');
+        setConsumedInput('');
+        setWeightInput('');
+      }, [selectedDate]);
+
+      // targetWeightが変わったら入力欄同期（必要時のみ）
+      useEffect(() => {
+        setTargetWeightInput('');
+      }, [targetWeight]);
+
+      const saveSelectedDay = (e) => {
         e.preventDefault();
 
-        const t = parseInt(targetInput, 10);
-        const s = parseInt(surplusInput, 10);
-
-        // targetは0以上、surplusはマイナス可
-        const targetKcal = Number.isFinite(t) ? t : (dayData.targetKcal || 0);
-        const surplusKcal = Number.isFinite(s) ? s : (dayData.surplusKcal || 0);
+        const t = toIntOrNull(targetInput);
+        const c = toIntOrNull(consumedInput);
+        const w = toFloatOrNull(weightInput);
 
         setDailyLog(prev => ({
           ...(prev || {}),
           [selectedDate]: {
-            targetKcal,
-            surplusKcal,
+            ...(prev?.[selectedDate] || { target: null, consumed: null, weight: null, updatedAt: null }),
+            target: (t !== null ? t : (prev?.[selectedDate]?.target ?? selectedRow.target ?? null)),
+            consumed: (c !== null ? c : (prev?.[selectedDate]?.consumed ?? selectedRow.consumed ?? null)),
+            weight: (w !== null ? w : (prev?.[selectedDate]?.weight ?? selectedRow.weight ?? null)),
             updatedAt: new Date().toISOString()
           }
         }));
 
         setTargetInput('');
-        setSurplusInput('');
+        setConsumedInput('');
+        setWeightInput('');
 
         setTimeout(() => lucide.createIcons(), 0);
+      };
+
+      // 目標体重の保存
+      const saveTargetWeight = () => {
+        const v = toFloatOrNull(targetWeightInput);
+        if (v === null) return;
+        setTargetWeight(v);
+        setTargetWeightInput('');
       };
 
       const resetAll = () => {
         if (!confirm('全データを削除します。よろしいですか？')) return;
         setDailyLog({});
-        setTargetInput('');
-        setSurplusInput('');
         setSelectedDate(today);
+        setTargetInput('');
+        setConsumedInput('');
+        setWeightInput('');
+        setTargetWeight(null);
+        setTargetWeightInput('');
       };
 
-      const jumpToday = () => setSelectedDate(today);
+      // ===== 週表示（今日を含む直近7日。ただし開始日未満は除外） =====
+      const weeklyDates = useMemo(() => {
+        const base = toDateObj(today);
+        const out = [];
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(base);
+          d.setDate(d.getDate() - i);
+          const iso = getLocalISODate(d);
+          if (toDateObj(iso) < toDateObj(START_DATE)) continue;
+          out.push(iso);
+        }
+        return out;
+      }, [today, START_DATE]);
 
-      // ヘッダー表示は「選択日」の surplus（その日の貯金/借金）
-      const headerSurplus = Number.isFinite(displaySurplus) ? displaySurplus : 0;
+      // ===== 推移で手入力（目標/摂取）更新 =====
+      const setDayField = (date, field, valueStr) => {
+        // weightは小数対応、kcalは整数
+        const v = (field === 'weight') ? toFloatOrNull(valueStr) : toIntOrNull(valueStr);
+        setDailyLog(prev => ({
+          ...(prev || {}),
+          [date]: {
+            ...(prev?.[date] || { target: null, consumed: null, weight: null, updatedAt: null }),
+            [field]: v,
+            updatedAt: new Date().toISOString()
+          }
+        }));
+      };
 
+      // ===== 体重「あと○○kg」表示（選択日） =====
+      const remainingKg = useMemo(() => {
+        const w = Number(selectedRow.weight);
+        const tw = Number(targetWeight);
+        if (!Number.isFinite(w) || !Number.isFinite(tw)) return null;
+        return (w - tw);
+      }, [selectedRow.weight, targetWeight]);
+
+      // ===== Lucide init =====
       useEffect(() => {
-        setTimeout(() => lucide.createIcons(), 150);
+        setTimeout(() => lucide.createIcons(), 200);
       }, []);
 
       return (
@@ -194,7 +284,7 @@
           <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col h-[92vh] relative border border-slate-200">
 
             {/* Header */}
-            <div className={`shrink-0 p-8 text-white transition-all duration-500 ${headerSurplus >= 0 ? 'bg-indigo-600' : 'bg-rose-500'}`}>
+            <div className={`shrink-0 p-8 text-white transition-all duration-500 ${headerSaving >= 0 ? 'bg-indigo-600' : 'bg-rose-500'}`}>
               <div className="flex justify-between items-center mb-6">
                 <h1 className="text-xl font-bold flex items-center gap-2">
                   <i data-lucide="piggy-bank"></i> Calorie Bank
@@ -209,14 +299,13 @@
               </div>
 
               <div className="text-center py-2">
-                <p className="text-xs opacity-70 mb-1 font-bold uppercase tracking-wider">Selected Day Surplus</p>
-
+                <p className="text-xs opacity-70 mb-1 font-bold uppercase tracking-wider">TODAY'S BALANCE</p>
                 <div className="text-[11px] font-bold opacity-90 mb-2">
-                  {fmtJP(selectedDate)}（開始日: {fmtJP(START_DATE)}）
+                  {fmtJP(today)}（開始日: {fmtJP(START_DATE)}）
                 </div>
 
                 <div className="text-6xl font-black mb-4 flex items-center justify-center">
-                  {headerSurplus > 0 ? '+' : ''}{headerSurplus}
+                  {headerSaving > 0 ? '+' : ''}{headerSaving}
                   <span className="text-lg font-normal ml-2 opacity-60">kcal</span>
                 </div>
 
@@ -226,7 +315,7 @@
                     累計残高: {totalBalance > 0 ? '+' : ''}{totalBalance.toLocaleString()} kcal
                   </div>
                   <div className="text-[10px] opacity-70">
-                    目標（選択日）: {Number.isFinite(displayTarget) ? displayTarget.toLocaleString() : '0'} kcal
+                    累計残高は「推移の +/−（saving）」を合計した値です。
                   </div>
                 </div>
               </div>
@@ -243,7 +332,7 @@
               </button>
               <button
                 onClick={() => setActiveTab('weekly')}
-                className={`flex-1 flex flex-col items-center py-2 transition-all ${activeTab === 'weekly' ? 'text-indigo-600 bg-indigo-50 rounded-2xl' : 'text-slate-400'}`}
+                className={`flex-1 flex flex-col items-centerlyll items-center py-2 transition-all ${activeTab === 'weekly' ? 'text-indigo-600 bg-indigo-50 rounded-2xl' : 'text-slate-400'}`}
               >
                 <i data-lucide="trending-up" className="w-5 h-5"></i>
                 <span className="text-[10px] font-black mt-1 uppercase">推移</span>
@@ -255,7 +344,7 @@
               {activeTab === 'bank' ? (
                 <div className="p-6 space-y-6">
 
-                  {/* 日付選択（開始日以降のみ） */}
+                  {/* 日付選択（開始日〜今日） */}
                   <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="h-1 w-4 bg-indigo-500 rounded-full" />
@@ -272,7 +361,7 @@
                         className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-100"
                       />
                       <button
-                        onClick={jumpToday}
+                        onClick={() => setSelectedDate(today)}
                         className="shrink-0 px-4 py-3 rounded-2xl text-xs font-black bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
                       >
                         今日
@@ -284,40 +373,89 @@
                     </p>
                   </div>
 
-                  {/* 手入力フォーム：目標 + 余剰 */}
-                  <form onSubmit={saveDay} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
+                  {/* 体重（現在/目標/あと○○kg） */}
+                  <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1 w-4 bg-indigo-500 rounded-full" />
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">体重</h3>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 ml-2 block uppercase">現在の体重（選択日）(kg)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          placeholder={selectedRow.weight === null ? "未入力" : String(selectedRow.weight)}
+                          value={weightInput}
+                          onChange={(e) => setWeightInput(e.target.value)}
+                          className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-100"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-400 ml-2 block uppercase">目標体重 (kg)</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder={targetWeight === null ? "未設定" : String(targetWeight)}
+                            value={targetWeightInput}
+                            onChange={(e) => setTargetWeightInput(e.target.value)}
+                            className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-100"
+                          />
+                          <button
+                            onClick={saveTargetWeight}
+                            type="button"
+                            className="shrink-0 px-4 rounded-2xl text-xs font-black bg-indigo-600 text-white hover:bg-indigo-700"
+                            title="目標体重を保存"
+                          >
+                            保存
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-2xl px-4 py-3 flex justify-between text-[11px] font-bold">
+                      <span className="text-slate-500">目標体重まで</span>
+                      <span className="font-black text-slate-800">
+                        {remainingKg === null ? '--' : `あと ${fmt1(remainingKg)} kg`}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400">
+                      ※「あと○○kg」は（現在の体重 − 目標体重）で計算します。
+                    </p>
+                  </div>
+
+                  {/* 選択日の入力（目標・摂取） */}
+                  <form onSubmit={saveSelectedDay} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="h-1 w-4 bg-indigo-500 rounded-full" />
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">手入力（目標・余剰）</h3>
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">摂取カロリー</h3>
                     </div>
 
                     <div className="space-y-4">
                       <div>
-                        <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">目標摂取カロリー (kcal)</label>
+                        <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">目標 (kcal)</label>
                         <input
                           type="number"
-                          placeholder={String(dayData.targetKcal || 0)}
+                          placeholder={selectedRow.target === null ? "未入力" : String(selectedRow.target)}
                           value={targetInput}
                           onChange={(e) => setTargetInput(e.target.value)}
                           className="w-full bg-slate-50 border-none rounded-2xl p-4 text-lg font-bold focus:ring-2 focus:ring-indigo-100"
                         />
-                        <p className="text-[11px] text-slate-400 mt-1 ml-1">
-                          例：2000（その日の目標）
-                        </p>
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">余剰カロリー (kcal)（マイナス可）</label>
+                        <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">摂取 (kcal)</label>
                         <input
                           type="number"
-                          placeholder={String(dayData.surplusKcal || 0)}
-                          value={surplusInput}
-                          onChange={(e) => setSurplusInput(e.target.value)}
+                          placeholder={selectedRow.consumed === null ? "未入力" : String(selectedRow.consumed)}
+                          value={consumedInput}
+                          onChange={(e) => setConsumedInput(e.target.value)}
                           className="w-full bg-slate-50 border-none rounded-2xl p-4 text-lg font-bold focus:ring-2 focus:ring-indigo-100"
                         />
-                        <p className="text-[11px] text-slate-400 mt-1 ml-1">
-                          例：+200（貯金） / -300（借金）
-                        </p>
                       </div>
                     </div>
 
@@ -329,61 +467,132 @@
                     </button>
 
                     <div className="text-[11px] text-slate-400">
-                      ※累計残高は「余剰カロリー」の合計です（マイナスも反映）。
+                      ※「+ / −」は 目標 − 摂取 で自動計算します（マイナスも可）。<br/>
+                      ※体重も同時に保存したい場合は、上の「現在の体重」に入力してから同じ「記録する」を押してください。
                     </div>
                   </form>
 
-                  {/* 選択日の保存値表示 */}
+                  {/* 選択日の表示 */}
                   <div className="bg-white rounded-3xl p-6 border border-slate-100 space-y-3">
                     <div className="flex justify-between text-xs font-bold text-slate-500">
                       <span>保存データ（{fmtJP(selectedDate)}）</span>
                       <span className="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">
-                        {dayData.updatedAt ? '記録あり' : '未記録'}
+                        {selectedRow.updatedAt ? '記録あり' : '未記録'}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 text-[11px] font-bold text-slate-500">
                       <div className="bg-slate-50 rounded-2xl px-4 py-3 flex justify-between">
                         <span>目標</span>
-                        <span className="text-slate-700">{Number(dayData.targetKcal || 0).toLocaleString()} kcal</span>
-                      </div>
-                      <div className="bg-slate-50 rounded-2xl px-4 py-3 flex justify-between">
-                        <span>余剰</span>
-                        <span className={`font-black ${Number(dayData.surplusKcal || 0) >= 0 ? 'text-indigo-600' : 'text-rose-500'}`}>
-                          {Number(dayData.surplusKcal || 0) > 0 ? '+' : ''}{Number(dayData.surplusKcal || 0).toLocaleString()} kcal
+                        <span className="text-slate-700">
+                          {selectedRow.target === null ? '--' : `${selectedRow.target.toLocaleString()} kcal`}
                         </span>
                       </div>
+                      <div className="bg-slate-50 rounded-2xl px-4 py-3 flex justify-between">
+                        <span>摂取</span>
+                        <span className="text-slate-700">
+                          {selectedRow.consumed === null ? '--' : `${selectedRow.consumed.toLocaleString()} kcal`}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-[11px] font-bold text-slate-500">
+                      <div className="bg-slate-50 rounded-2xl px-4 py-3 flex justify-between">
+                        <span>体重</span>
+                        <span className="text-slate-700">
+                          {selectedRow.weight === null ? '--' : `${selectedRow.weight} kg`}
+                        </span>
+                      </div>
+                      <div className="bg-slate-50 rounded-2xl px-4 py-3 flex justify-between">
+                        <span>目標体重</span>
+                        <span className="text-slate-700">
+                          {targetWeight === null ? '--' : `${targetWeight} kg`}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-2xl px-4 py-3 flex justify-between text-[11px] font-bold">
+                      <span className="text-slate-500">+ / −</span>
+                      <span className={`${Number.isFinite(savingByDate[selectedDate]) && savingByDate[selectedDate] < 0 ? 'text-rose-500' : 'text-indigo-600'} font-black`}>
+                        {Number.isFinite(savingByDate[selectedDate]) ? `${savingByDate[selectedDate] > 0 ? '+' : ''}${savingByDate[selectedDate].toLocaleString()} kcal` : '--'}
+                      </span>
                     </div>
                   </div>
 
                 </div>
               ) : (
                 <div className="p-6 space-y-4">
-                  {weeklyStats.map((day, i) => (
-                    <div key={i} className="p-5 bg-white rounded-[1.5rem] border border-slate-100 shadow-sm">
-                      <div className="flex justify-between items-start">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-slate-400 mb-1">{day.dateLabel}</span>
-                          <span className="text-sm font-black text-slate-700">
-                            目標 {day.targetKcal ? day.targetKcal.toLocaleString() : '0'} kcal
-                            <span className="text-[10px] font-bold text-slate-400 ml-2">
-                              {day.hasLog ? '' : '（未記録）'}
+
+                  {/* 推移：各行の数値を手入力できる + savingが変わる + 累計に反映 */}
+                  {weeklyDates.map((dateISO, i) => {
+                    const row = filteredLog[dateISO] || { target: null, consumed: null, weight: null };
+                    const saving = savingByDate[dateISO]; // null or number
+
+                    return (
+                      <div key={i} className="p-5 bg-white rounded-[1.5rem] border border-slate-100 shadow-sm">
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-slate-400 mb-1">{dateISO.split('-').slice(1).join('/')}</span>
+                            <span className="text-[10px] font-bold text-slate-400">
+                              {row.target === null && row.consumed === null ? '（未入力）' : '（入力済み）'}
                             </span>
-                          </span>
+                          </div>
+
+                          <div className="text-right">
+                            <span className={`text-lg font-black ${Number.isFinite(saving) && saving < 0 ? 'text-rose-500' : 'text-indigo-600'}`}>
+                              {Number.isFinite(saving) ? `${saving > 0 ? '+' : ''}${saving.toLocaleString()}` : '--'}
+                            </span>
+                            <div className="text-[9px] text-slate-400 font-bold uppercase">KCAL SAVING</div>
+                          </div>
                         </div>
 
-                        <div className="text-right">
-                          <span className={`text-lg font-black ${day.surplusKcal >= 0 ? 'text-indigo-600' : 'text-rose-500'}`}>
-                            {day.surplusKcal > 0 ? '+' : ''}{day.surplusKcal.toLocaleString()}
-                          </span>
-                          <div className="text-[9px] text-slate-400 font-bold uppercase">kcal Surplus</div>
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                          <div className="bg-slate-50 rounded-2xl px-4 py-3">
+                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">目標</div>
+                            <input
+                              type="number"
+                              value={row.target === null ? '' : String(row.target)}
+                              onChange={(e) => setDayField(dateISO, 'target', e.target.value)}
+                              placeholder="例: 2000"
+                              className="w-full bg-white/70 border-none rounded-xl p-3 text-sm font-black text-slate-800 focus:ring-2 focus:ring-indigo-100"
+                            />
+                          </div>
+
+                          <div className="bg-slate-50 rounded-2xl px-4 py-3">
+                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">摂取</div>
+                            <input
+                              type="number"
+                              value={row.consumed === null ? '' : String(row.consumed)}
+                              onChange={(e) => setDayField(dateISO, 'consumed', e.target.value)}
+                              placeholder="例: 1500"
+                              className="w-full bg-white/70 border-none rounded-xl p-3 text-sm font-black text-slate-800 focus:ring-2 focus:ring-indigo-100"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-1 gap-3">
+                          <div className="bg-slate-50 rounded-2xl px-4 py-3">
+                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">体重（任意）</div>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={row.weight === null ? '' : String(row.weight)}
+                              onChange={(e) => setDayField(dateISO, 'weight', e.target.value)}
+                              placeholder="例: 72.3"
+                              className="w-full bg-white/70 border-none rounded-xl p-3 text-sm font-black text-slate-800 focus:ring-2 focus:ring-indigo-100"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-3 text-[11px] text-slate-400">
+                          ※「+ / −」は 目標 − 摂取 で自動更新され、累計残高にも反映されます。
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   <p className="text-[11px] text-slate-400 px-1">
-                    ※推移は「余剰カロリー（＋/−）」を中心に表示します。日付は入力画面で変更してください。
+                    推移で各日の「目標」「摂取」を手入力すると、右上の「+ / −（saving）」が変わり、ヘッダーの累計残高にも反映されます。
                   </p>
                 </div>
               )}
