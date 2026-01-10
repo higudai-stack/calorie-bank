@@ -1,214 +1,402 @@
+<!-- Save this file as: CB_TEST3.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calorie Bank </title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Calorie Bank</title>
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="icon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
 
-<link rel="icon" href="icon.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
-
-<!-- iOS Splash (Add to Home Screen の起動時に出る) -->
-<link rel="apple-touch-startup-image" href="splash-1290x2796.png"
-  media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-<link rel="apple-touch-startup-image" href="splash-1179x2556.png"
-  media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-<link rel="apple-touch-startup-image" href="splash-1170x2532.png"
-  media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-<link rel="apple-touch-startup-image" href="splash-1125x2436.png"
-  media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
-<link rel="apple-touch-startup-image" href="splash-828x1792.png"
-  media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
-<link rel="apple-touch-startup-image" href="splash-750x1334.png"
-  media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
-
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-    </style>
-
-    <!-- ✅ Babel（※ text/babel を使うために、先に読み込むのが安全） -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  </style>
 </head>
 
 <body class="bg-slate-100">
-    <div id="root"></div>
+  <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
-        const { PiggyBank, Scale, TrendingUp, Target, Wallet, Info, Save } = lucide;
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
 
-        function App() {
-            const [activeTab, setActiveTab] = useState('bank');
-            const [goals, setGoals] = useState(() => {
-                const saved = localStorage.getItem('calorie_bank_goals');
-                return saved ? JSON.parse(saved) : { calorie: 2000, weight: 65.0 };
-            });
-            const [isEditingGoal, setIsEditingGoal] = useState(false);
-            const [dailyLog, setDailyLog] = useState(() => {
-                const saved = localStorage.getItem('calorie_bank_data');
-                return saved ? JSON.parse(saved) : {};
-            });
+    // ローカル日付（端末基準）YYYY-MM-DD
+    function getLocalISODate(d = new Date()) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+    function toDateObj(iso) {
+      return new Date(`${iso}T00:00:00`);
+    }
+    function fmtJP(iso) {
+      return iso.replaceAll('-', '/');
+    }
+    function clampISO(iso, minIso, maxIso) {
+      const d = toDateObj(iso);
+      if (d < toDateObj(minIso)) return minIso;
+      if (d > toDateObj(maxIso)) return maxIso;
+      return iso;
+    }
+    function isISO(iso) {
+      return /^\d{4}-\d{2}-\d{2}$/.test(iso);
+    }
 
-            const today = new Date().toISOString().split('T')[0];
-            const [inputCalorie, setInputCalorie] = useState('');
-            const [weight, setWeight] = useState('');
-            const [fat, setFat] = useState('');
+    function App() {
+      const START_DATE = "2026-01-08";
+      const todayRaw = getLocalISODate();
+      const today = (toDateObj(todayRaw) < toDateObj(START_DATE)) ? START_DATE : todayRaw;
 
-            useEffect(() => {
-                localStorage.setItem('calorie_bank_data', JSON.stringify(dailyLog));
-                localStorage.setItem('calorie_bank_goals', JSON.stringify(goals));
-            }, [dailyLog, goals]);
+      const [activeTab, setActiveTab] = useState('bank');
 
-            const currentDayData = useMemo(() => dailyLog[today] || { weight: 0, fat: 0, consumed: 0 }, [dailyLog, today]);
-            const todaySaving = goals.calorie - currentDayData.consumed;
-            const totalSavings = useMemo(() => {
-                return Object.keys(dailyLog).reduce((acc, date) => {
-                    const dayData = dailyLog[date];
-                    return acc + (goals.calorie - (dayData.consumed || 0));
-                }, 0);
-            }, [dailyLog, goals.calorie]);
+      /**
+       * 仕様（CB_TEST3）
+       * - 2026-01-08 以降について
+       *   - 目標摂取カロリー（targetKcal）を手入力
+       *   - 余剰カロリー（surplusKcal）を手入力（マイナス可）
+       * - 累計残高 = surplusKcal の合計
+       * - 選択日を切替して、開始日以降〜今日まで入力できる（過去修正可）
+       */
+      const [dailyLog, setDailyLog] = useState(() => {
+        const saved = localStorage.getItem('calorie_bank_manual_v1');
+        return saved ? JSON.parse(saved) : {};
+      });
 
-            const updateEntry = (e) => {
-                e.preventDefault();
-                setDailyLog(prev => ({
-                    ...prev,
-                    [today]: {
-                        ...prev[today],
-                        consumed: parseInt(inputCalorie) || (prev[today]?.consumed || 0),
-                        weight: parseFloat(weight) || (prev[today]?.weight || 0),
-                        fat: parseFloat(fat) || (prev[today]?.fat || 0)
-                    }
-                }));
-                setInputCalorie(''); setWeight(''); setFat('');
-            };
+      const [selectedDate, setSelectedDate] = useState(() => {
+        const saved = localStorage.getItem('calorie_bank_selected_date_v1');
+        const initial = saved && isISO(saved) ? saved : today;
+        return clampISO(initial, START_DATE, today);
+      });
 
-            const weeklyStats = useMemo(() => {
-                const stats = [];
-                for (let i = 6; i >= 0; i--) {
-                    const d = new Date(); d.setDate(d.getDate() - i);
-                    const dateStr = d.toISOString().split('T')[0];
-                    const data = dailyLog[dateStr] || { weight: 0, consumed: 0 };
-                    stats.push({
-                        date: dateStr.split('-').slice(1).join('/'),
-                        saving: goals.calorie - (data.consumed || 0),
-                        weight: data.weight
-                    });
-                }
-                return stats;
-            }, [dailyLog, goals.calorie]);
+      // 入力欄（手入力）
+      const [targetInput, setTargetInput] = useState('');
+      const [surplusInput, setSurplusInput] = useState('');
 
-            return (
-                <div className="flex justify-center items-center min-h-screen p-2">
-                    <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col h-[92vh] relative border border-slate-200">
-                        <div className={`shrink-0 p-8 text-white transition-all duration-500 ${todaySaving >= 0 ? 'bg-indigo-600' : 'bg-rose-500'}`}>
-                            <div className="flex justify-between items-center mb-6">
-                                <h1 className="text-xl font-bold flex items-center gap-2"><i data-lucide="piggy-bank"></i> Calorie Bank</h1>
-                                <button onClick={() => setIsEditingGoal(true)} className="bg-white/20 p-2 rounded-full hover:bg-white/30 transition-colors">
-                                    <i data-lucide="target"></i>
-                                </button>
-                            </div>
-                            <div className="text-center py-4">
-                                <p className="text-xs opacity-70 mb-1 font-bold uppercase tracking-wider">Today's Balance</p>
-                                <div className="text-6xl font-black mb-4 flex items-center justify-center">
-                                    {todaySaving > 0 ? '+' : ''}{todaySaving}<span className="text-lg font-normal ml-2 opacity-60">kcal</span>
-                                </div>
-                                <div className="inline-flex items-center gap-2 bg-black/20 px-5 py-2 rounded-2xl text-sm font-bold backdrop-blur-sm">
-                                    <i data-lucide="wallet" className="w-4 h-4"></i> 累計貯金: {totalSavings.toLocaleString()} kcal
-                                </div>
-                            </div>
-                        </div>
+      // 永続化
+      useEffect(() => {
+        localStorage.setItem('calorie_bank_manual_v1', JSON.stringify(dailyLog));
+        localStorage.setItem('calorie_bank_selected_date_v1', selectedDate);
+      }, [dailyLog, selectedDate]);
 
-                        <div className="flex justify-around bg-white border-b border-slate-100 p-2 shrink-0">
-                            <button onClick={() => setActiveTab('bank')} className={`flex-1 flex flex-col items-center py-2 transition-all ${activeTab === 'bank' ? 'text-indigo-600 bg-indigo-50 rounded-2xl' : 'text-slate-400'}`}>
-                                <i data-lucide="piggy-bank" className="w-5 h-5"></i><span className="text-[10px] font-black mt-1 uppercase">貯金箱</span>
-                            </button>
-                            <button onClick={() => setActiveTab('weekly')} className={`flex-1 flex flex-col items-center py-2 transition-all ${activeTab === 'weekly' ? 'text-indigo-600 bg-indigo-50 rounded-2xl' : 'text-slate-400'}`}>
-                                <i data-lucide="trending-up" className="w-5 h-5"></i><span className="text-[10px] font-black mt-1 uppercase">推移</span>
-                            </button>
-                        </div>
+      // 開始日以前は除外（念のため）
+      const filteredLog = useMemo(() => {
+        const out = {};
+        Object.keys(dailyLog || {}).forEach(date => {
+          if (!isISO(date)) return;
+          if (toDateObj(date) < toDateObj(START_DATE)) return;
+          out[date] = dailyLog[date];
+        });
+        return out;
+      }, [dailyLog]);
 
-                        <div className="flex-grow overflow-y-auto custom-scrollbar bg-slate-50/50">
-                            {activeTab === 'bank' ? (
-                                <div className="p-6 space-y-6">
-                                    <form onSubmit={updateEntry} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
-                                        <div className="flex items-center gap-2 mb-2"><div className="h-1 w-4 bg-indigo-500 rounded-full" /><h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">本日のデータ</h3></div>
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">摂取カロリー (kcal)</label>
-                                                <input type="number" placeholder={currentDayData.consumed || "例: 1800"} value={inputCalorie} onChange={(e) => setInputCalorie(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-lg font-bold focus:ring-2 focus:ring-indigo-100" />
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">体重 (kg)</label>
-                                                    <input type="number" step="0.1" placeholder={currentDayData.weight || "0.0"} value={weight} onChange={(e) => setWeight(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-100" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">体脂肪 (%)</label>
-                                                    <input type="number" step="0.1" placeholder={currentDayData.fat || "0.0"} value={fat} onChange={(e) => setFat(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-100" />
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 flex items-center justify-center gap-2"><i data-lucide="save" className="w-4 h-4"></i>データを記録する</button>
-                                    </form>
-                                    <div className="bg-white rounded-3xl p-6 border border-slate-100 space-y-3">
-                                        <div className="flex justify-between text-xs font-bold text-slate-500"><span>現在の目標設定</span><span className="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">{goals.calorie} kcal / 日</span></div>
-                                        <div className="flex justify-between border-t pt-3 text-xs font-bold text-slate-500"><span>目標体重まで</span><span className="text-sm font-black text-slate-800">あと {currentDayData.weight ? (currentDayData.weight - goals.weight).toFixed(1) : '--'} kg</span></div>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="p-6 space-y-4">
-                                    {weeklyStats.map((day, i) => (
-                                        <div key={i} className="flex justify-between p-5 bg-white rounded-[1.5rem] border border-slate-100 shadow-sm">
-                                            <div className="flex flex-col"><span className="text-[10px] font-bold text-slate-400 mb-1">{day.date}</span><span className="text-sm font-black text-slate-700">{day.weight ? `${day.weight} kg` : '--'}</span></div>
-                                            <div className="text-right flex items-center gap-4">
-                                                <div className="flex flex-col items-end"><span className={`text-sm font-black ${day.saving >= 0 ? 'text-indigo-600' : 'text-rose-500'}`}>{day.saving > 0 ? '+' : ''}{day.saving}</span><span className="text-[9px] text-slate-400 font-bold uppercase">kcal Saving</span></div>
-                                                <div className="w-1 h-8 bg-slate-100 rounded-full overflow-hidden"><div className={`w-full rounded-full ${day.saving >= 0 ? 'bg-indigo-500' : 'bg-rose-500'}`} style={{ height: `${Math.min(Math.abs(day.saving / 10), 100)}%` }}></div></div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+      // 選択日のデータ
+      const dayData = useMemo(() => {
+        const d = filteredLog[selectedDate];
+        return d ? d : { targetKcal: 0, surplusKcal: 0, updatedAt: null };
+      }, [filteredLog, selectedDate]);
 
-                        {isEditingGoal && (
-                            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm z-20 flex items-end">
-                                <div className="w-full bg-white rounded-t-[3rem] p-8 animate-bounce-in">
-                                    <div className="flex justify-between items-center mb-8"><h3 className="font-black text-xl">目標設定</h3><button onClick={() => setIsEditingGoal(false)} className="text-slate-400 bg-slate-100 p-2 rounded-full">✕</button></div>
-                                    <div className="space-y-6 mb-8">
-                                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">1日の目標摂取量 (kcal)</label><input type="number" value={goals.calorie} onChange={(e) => setGoals({...goals, calorie: parseInt(e.target.value) || 0})} className="w-full bg-slate-50 border-none rounded-2xl p-5 text-xl font-bold" /></div>
-                                        <div className="space-y-2"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">目標体重 (kg)</label><input type="number" step="0.1" value={goals.weight} onChange={(e) => setGoals({...goals, weight: parseFloat(e.target.value) || 0})} className="w-full bg-slate-50 border-none rounded-2xl p-5 text-xl font-bold" /></div>
-                                    </div>
-                                    <button onClick={() => setIsEditingGoal(false)} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-2xl">保存して戻る</button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
+      // その日の表示（手入力値が空なら保存値を表示）
+      const displayTarget = (targetInput !== '' ? Number(targetInput) : Number(dayData.targetKcal || 0));
+      const displaySurplus = (surplusInput !== '' ? Number(surplusInput) : Number(dayData.surplusKcal || 0));
+
+      // 累計残高（マイナス可）
+      const totalBalance = useMemo(() => {
+        return Object.keys(filteredLog).reduce((acc, date) => {
+          const s = Number(filteredLog[date]?.surplusKcal ?? 0);
+          return acc + (Number.isFinite(s) ? s : 0);
+        }, 0);
+      }, [filteredLog]);
+
+      // 週表示（選択日基準の直近7日、開始日未満は除外）
+      const weeklyStats = useMemo(() => {
+        const stats = [];
+        const base = toDateObj(selectedDate);
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(base);
+          d.setDate(d.getDate() - i);
+          const iso = getLocalISODate(d);
+          if (toDateObj(iso) < toDateObj(START_DATE)) continue;
+
+          const row = filteredLog[iso] || null;
+          stats.push({
+            dateISO: iso,
+            dateLabel: iso.split('-').slice(1).join('/'),
+            targetKcal: Number(row?.targetKcal ?? 0),
+            surplusKcal: Number(row?.surplusKcal ?? 0),
+            hasLog: !!row
+          });
         }
+        return stats;
+      }, [filteredLog, selectedDate]);
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-        setTimeout(() => lucide.createIcons(), 500);
-    </script>
+      const saveDay = (e) => {
+        e.preventDefault();
+
+        const t = parseInt(targetInput, 10);
+        const s = parseInt(surplusInput, 10);
+
+        // targetは0以上、surplusはマイナス可
+        const targetKcal = Number.isFinite(t) ? t : (dayData.targetKcal || 0);
+        const surplusKcal = Number.isFinite(s) ? s : (dayData.surplusKcal || 0);
+
+        setDailyLog(prev => ({
+          ...(prev || {}),
+          [selectedDate]: {
+            targetKcal,
+            surplusKcal,
+            updatedAt: new Date().toISOString()
+          }
+        }));
+
+        setTargetInput('');
+        setSurplusInput('');
+
+        setTimeout(() => lucide.createIcons(), 0);
+      };
+
+      const resetAll = () => {
+        if (!confirm('全データを削除します。よろしいですか？')) return;
+        setDailyLog({});
+        setTargetInput('');
+        setSurplusInput('');
+        setSelectedDate(today);
+      };
+
+      const jumpToday = () => setSelectedDate(today);
+
+      // ヘッダー表示は「選択日」の surplus（その日の貯金/借金）
+      const headerSurplus = Number.isFinite(displaySurplus) ? displaySurplus : 0;
+
+      useEffect(() => {
+        setTimeout(() => lucide.createIcons(), 150);
+      }, []);
+
+      return (
+        <div className="flex justify-center items-center min-h-screen p-2">
+          <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col h-[92vh] relative border border-slate-200">
+
+            {/* Header */}
+            <div className={`shrink-0 p-8 text-white transition-all duration-500 ${headerSurplus >= 0 ? 'bg-indigo-600' : 'bg-rose-500'}`}>
+              <div className="flex justify-between items-center mb-6">
+                <h1 className="text-xl font-bold flex items-center gap-2">
+                  <i data-lucide="piggy-bank"></i> Calorie Bank
+                </h1>
+                <button
+                  onClick={resetAll}
+                  className="bg-white/20 p-2 rounded-full hover:bg-white/30 transition-colors"
+                  title="全データ削除"
+                >
+                  <i data-lucide="trash-2"></i>
+                </button>
+              </div>
+
+              <div className="text-center py-2">
+                <p className="text-xs opacity-70 mb-1 font-bold uppercase tracking-wider">Selected Day Surplus</p>
+
+                <div className="text-[11px] font-bold opacity-90 mb-2">
+                  {fmtJP(selectedDate)}（開始日: {fmtJP(START_DATE)}）
+                </div>
+
+                <div className="text-6xl font-black mb-4 flex items-center justify-center">
+                  {headerSurplus > 0 ? '+' : ''}{headerSurplus}
+                  <span className="text-lg font-normal ml-2 opacity-60">kcal</span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="inline-flex items-center gap-2 bg-black/20 px-5 py-2 rounded-2xl text-sm font-bold backdrop-blur-sm">
+                    <i data-lucide="wallet" className="w-4 h-4"></i>
+                    累計残高: {totalBalance > 0 ? '+' : ''}{totalBalance.toLocaleString()} kcal
+                  </div>
+                  <div className="text-[10px] opacity-70">
+                    目標（選択日）: {Number.isFinite(displayTarget) ? displayTarget.toLocaleString() : '0'} kcal
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex justify-around bg-white border-b border-slate-100 p-2 shrink-0">
+              <button
+                onClick={() => setActiveTab('bank')}
+                className={`flex-1 flex flex-col items-center py-2 transition-all ${activeTab === 'bank' ? 'text-indigo-600 bg-indigo-50 rounded-2xl' : 'text-slate-400'}`}
+              >
+                <i data-lucide="piggy-bank" className="w-5 h-5"></i>
+                <span className="text-[10px] font-black mt-1 uppercase">入力</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('weekly')}
+                className={`flex-1 flex flex-col items-center py-2 transition-all ${activeTab === 'weekly' ? 'text-indigo-600 bg-indigo-50 rounded-2xl' : 'text-slate-400'}`}
+              >
+                <i data-lucide="trending-up" className="w-5 h-5"></i>
+                <span className="text-[10px] font-black mt-1 uppercase">推移</span>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-grow overflow-y-auto custom-scrollbar bg-slate-50/50">
+              {activeTab === 'bank' ? (
+                <div className="p-6 space-y-6">
+
+                  {/* 日付選択（開始日以降のみ） */}
+                  <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1 w-4 bg-indigo-500 rounded-full" />
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">日付</h3>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="date"
+                        value={selectedDate}
+                        min={START_DATE}
+                        max={today}
+                        onChange={(e) => setSelectedDate(clampISO(e.target.value || today, START_DATE, today))}
+                        className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-indigo-100"
+                      />
+                      <button
+                        onClick={jumpToday}
+                        className="shrink-0 px-4 py-3 rounded-2xl text-xs font-black bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                      >
+                        今日
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400">
+                      開始日（{fmtJP(START_DATE)}）以降のみ入力できます。
+                    </p>
+                  </div>
+
+                  {/* 手入力フォーム：目標 + 余剰 */}
+                  <form onSubmit={saveDay} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-1 w-4 bg-indigo-500 rounded-full" />
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">手入力（目標・余剰）</h3>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">目標摂取カロリー (kcal)</label>
+                        <input
+                          type="number"
+                          placeholder={String(dayData.targetKcal || 0)}
+                          value={targetInput}
+                          onChange={(e) => setTargetInput(e.target.value)}
+                          className="w-full bg-slate-50 border-none rounded-2xl p-4 text-lg font-bold focus:ring-2 focus:ring-indigo-100"
+                        />
+                        <p className="text-[11px] text-slate-400 mt-1 ml-1">
+                          例：2000（その日の目標）
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block uppercase">余剰カロリー (kcal)（マイナス可）</label>
+                        <input
+                          type="number"
+                          placeholder={String(dayData.surplusKcal || 0)}
+                          value={surplusInput}
+                          onChange={(e) => setSurplusInput(e.target.value)}
+                          className="w-full bg-slate-50 border-none rounded-2xl p-4 text-lg font-bold focus:ring-2 focus:ring-indigo-100"
+                        />
+                        <p className="text-[11px] text-slate-400 mt-1 ml-1">
+                          例：+200（貯金） / -300（借金）
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 flex items-center justify-center gap-2"
+                    >
+                      <i data-lucide="save" className="w-4 h-4"></i>記録する
+                    </button>
+
+                    <div className="text-[11px] text-slate-400">
+                      ※累計残高は「余剰カロリー」の合計です（マイナスも反映）。
+                    </div>
+                  </form>
+
+                  {/* 選択日の保存値表示 */}
+                  <div className="bg-white rounded-3xl p-6 border border-slate-100 space-y-3">
+                    <div className="flex justify-between text-xs font-bold text-slate-500">
+                      <span>保存データ（{fmtJP(selectedDate)}）</span>
+                      <span className="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">
+                        {dayData.updatedAt ? '記録あり' : '未記録'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-[11px] font-bold text-slate-500">
+                      <div className="bg-slate-50 rounded-2xl px-4 py-3 flex justify-between">
+                        <span>目標</span>
+                        <span className="text-slate-700">{Number(dayData.targetKcal || 0).toLocaleString()} kcal</span>
+                      </div>
+                      <div className="bg-slate-50 rounded-2xl px-4 py-3 flex justify-between">
+                        <span>余剰</span>
+                        <span className={`font-black ${Number(dayData.surplusKcal || 0) >= 0 ? 'text-indigo-600' : 'text-rose-500'}`}>
+                          {Number(dayData.surplusKcal || 0) > 0 ? '+' : ''}{Number(dayData.surplusKcal || 0).toLocaleString()} kcal
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              ) : (
+                <div className="p-6 space-y-4">
+                  {weeklyStats.map((day, i) => (
+                    <div key={i} className="p-5 bg-white rounded-[1.5rem] border border-slate-100 shadow-sm">
+                      <div className="flex justify-between items-start">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-slate-400 mb-1">{day.dateLabel}</span>
+                          <span className="text-sm font-black text-slate-700">
+                            目標 {day.targetKcal ? day.targetKcal.toLocaleString() : '0'} kcal
+                            <span className="text-[10px] font-bold text-slate-400 ml-2">
+                              {day.hasLog ? '' : '（未記録）'}
+                            </span>
+                          </span>
+                        </div>
+
+                        <div className="text-right">
+                          <span className={`text-lg font-black ${day.surplusKcal >= 0 ? 'text-indigo-600' : 'text-rose-500'}`}>
+                            {day.surplusKcal > 0 ? '+' : ''}{day.surplusKcal.toLocaleString()}
+                          </span>
+                          <div className="text-[9px] text-slate-400 font-bold uppercase">kcal Surplus</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <p className="text-[11px] text-slate-400 px-1">
+                    ※推移は「余剰カロリー（＋/−）」を中心に表示します。日付は入力画面で変更してください。
+                  </p>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+    setTimeout(() => lucide.createIcons(), 200);
+  </script>
 </body>
 </html>
